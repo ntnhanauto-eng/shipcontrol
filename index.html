@@ -192,9 +192,8 @@
         // Setup Data Listeners
         const setupListeners = () => {
             if (!user) return;
-
-            const collectionPath = `artifacts/${appId}/public/data/reports`;
-            const hoursPath = `artifacts/${appId}/public/data/vesselHours`;
+const collectionPath = "reports";
+const hoursPath = "vesselHours";
 
             document.getElementById('loading-indicator').classList.remove('hidden');
 
@@ -351,7 +350,7 @@
             };
 
             try {
-                await addDoc(collection(db, `artifacts/${appId}/public/data/reports`), data);
+                await addDoc(collection(db, "reports"), data);
                 showToast("Lưu thành công!");
                 // Clear some inputs but keep Date and Vessel for faster next entry
                 document.getElementById('workContent').value = '';
@@ -379,7 +378,7 @@
                 const vessel = input.getAttribute('data-vessel');
                 const hours = parseInt(input.value) || 0;
                 
-                const docRef = doc(db, `artifacts/${appId}/public/data/vesselHours`, vessel);
+                const docRef = doc(db, "vesselHours", vessel);
                 promises.push(setDoc(docRef, { hours: hours, updatedAt: Date.now() }, { merge: true }));
             });
 
@@ -400,7 +399,7 @@
                 const id = e.target.getAttribute('data-id');
                 if (confirm('Bạn có chắc chắn muốn xóa mục này?')) {
                     try {
-                        await deleteDoc(doc(db, `artifacts/${appId}/public/data/reports`, id));
+                       await deleteDoc(doc(db, "reports", id));
                         showToast("Đã xóa.");
                     } catch (err) {
                         showToast("Lỗi khi xóa.");
