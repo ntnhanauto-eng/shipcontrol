@@ -1,84 +1,420 @@
 <!DOCTYPE html>
-<html>
+<html lang="vi">
 <head>
-<meta charset="UTF-8">
-<title>3D BLOCK</title>
-
-<style>
-
-body{
-font-family: Arial;
-text-align:center;
-background:#f2f2f2;
-}
-
-h1{
-color:#00cc44;
-}
-
-input{
-width:220px;
-padding:8px;
-font-size:18px;
-margin:10px;
-}
-
-button{
-padding:12px 30px;
-font-size:18px;
-background:#888;
-color:blue;
-border:none;
-border-radius:5px;
-cursor:pointer;
-}
-
-</style>
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ thống Quản lý Công việc Tàu hàng ngày</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"></script>
+    <style>
+        .loading-spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #09f;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
 </head>
+<body class="bg-gray-50 min-h-screen font-sans">
+    <div id="app" class="max-w-6xl mx-auto p-4 sm:p-6">
+        <!-- Header -->
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl font-bold text-blue-800">QUẢN LÝ CÔNG VIỆC HÀNG NGÀY</h1>
+            <p class="text-gray-600 mt-2">Nhập và theo dõi nhân lực, giờ công theo từng tàu</p>
+            <div id="auth-status" class="mt-2 text-sm text-gray-500">Đang kiểm tra kết nối...</div>
+        </header>
 
-<body>
+        <!-- Form Nhập Liệu -->
+        <div class="bg-white shadow-md rounded-lg p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4 border-b pb-2 text-gray-700">Nhập dữ liệu mới</h2>
+            <form id="report-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                <div class="flex flex-col">
+                    <label class="text-sm font-medium mb-1">Ngày</label>
+                    <input type="date" id="date" required class="border rounded px-3 py-2 focus:ring-2 focus:ring-blue-400 outline-none">
+                </div>
+                <div class="flex flex-col">
+                    <label class="text-sm font-medium mb-1">Tên tàu</label>
+                    <input type="text" id="vesselName" placeholder="Tên tàu..." required class="border rounded px-3 py-2 focus:ring-2 focus:ring-blue-400 outline-none">
+                </div>
+                <div class="flex flex-col lg:col-span-1">
+                    <label class="text-sm font-medium mb-1">Nội dung công việc</label>
+                    <input type="text" id="workContent" placeholder="Việc cần làm..." required class="border rounded px-3 py-2 focus:ring-2 focus:ring-blue-400 outline-none">
+                </div>
+                <div class="flex flex-col">
+                    <label class="text-sm font-medium mb-1">Số lượng người</label>
+                    <input type="number" id="peopleCount" placeholder="Số người..." required min="0" class="border rounded px-3 py-2 focus:ring-2 focus:ring-blue-400 outline-none">
+                </div>
+                <div class="flex flex-col">
+                    <label class="text-sm font-medium mb-1">Ghi chú</label>
+                    <input type="text" id="note" placeholder="..." class="border rounded px-3 py-2 focus:ring-2 focus:ring-blue-400 outline-none">
+                </div>
+                <div class="lg:col-span-5 flex justify-end mt-2">
+                    <button type="submit" id="save-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition duration-200">
+                        Lưu dữ liệu
+                    </button>
+                </div>
+            </form>
+        </div>
 
-<h1>3D - BLOCK</h1>
-<br>
-<br>
-<p>Nhập tên tàu</p>
-<input id="ship" placeholder="Ví dụ: S57606">
+        <!-- Filter & Stats -->
+        <div class="bg-white shadow-md rounded-lg p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4 border-b pb-2 text-gray-700">Thống kê & Bộ lọc</h2>
+            <div class="flex flex-wrap gap-4 mb-6">
+                <div class="flex-1 min-w-[200px]">
+                    <label class="text-sm font-medium block mb-1">Lọc theo tàu</label>
+                    <select id="vessel-filter" class="w-full border rounded px-3 py-2">
+                        <option value="">Tất cả các tàu</option>
+                    </select>
+                </div>
+                <div class="flex-1 min-w-[200px]">
+                    <label class="text-sm font-medium block mb-1">Lọc theo ngày</label>
+                    <input type="date" id="date-filter" class="w-full border rounded px-3 py-2">
+                </div>
+                <div class="flex items-end">
+                    <button id="reset-filter" class="text-blue-600 underline text-sm">Xóa lọc</button>
+                </div>
+            </div>
 
-<p>Nhập tên Block</p>
-<input id="block" placeholder="Ví dụ: H12C">
+            <div id="stats-container" class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <!-- Stats cards injected here -->
+            </div>
+            
+            <div id="vessel-man-hours" class="mt-4 p-4 bg-gray-50 rounded-lg">
+                <h3 class="font-bold mb-3 text-blue-700 uppercase text-sm">Nhập số giờ công (Thủ công)</h3>
+                <div id="hours-input-list" class="space-y-3">
+                    <!-- Dynamic inputs for each vessel -->
+                    <p class="text-gray-400 italic text-sm text-center">Nhập dữ liệu để hiển thị danh sách tàu</p>
+                </div>
+                <button id="save-hours-btn" class="mt-4 bg-green-600 hover:bg-green-700 text-white text-sm py-2 px-4 rounded transition hidden">
+                    Lưu giờ công & Cập nhật
+                </button>
+            </div>
+        </div>
 
-<br>
-  <br>
+        <!-- Data Table -->
+        <div class="bg-white shadow-md rounded-lg overflow-hidden">
+            <div class="p-4 border-b bg-gray-50 flex justify-between items-center">
+                <h2 class="text-lg font-semibold text-gray-700">Danh sách dữ liệu chi tiết</h2>
+                <div id="loading-indicator" class="hidden"><div class="loading-spinner"></div></div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-blue-600 text-white">
+                            <th class="p-3 text-sm font-semibold uppercase">Ngày</th>
+                            <th class="p-3 text-sm font-semibold uppercase">Tên tàu</th>
+                            <th class="p-3 text-sm font-semibold uppercase">Nội dung công việc</th>
+                            <th class="p-3 text-sm font-semibold uppercase">Số người</th>
+                            <th class="p-3 text-sm font-semibold uppercase">Ghi chú</th>
+                            <th class="p-3 text-sm font-semibold uppercase text-center w-20">Xóa</th>
+                        </tr>
+                    </thead>
+                    <tbody id="data-table-body" class="text-gray-700">
+                        <!-- Rows injected here -->
+                    </tbody>
+                </table>
+            </div>
+            <div id="no-data" class="p-8 text-center text-gray-500 hidden">
+                Không tìm thấy dữ liệu phù hợp.
+            </div>
+        </div>
+    </div>
 
-<button onclick="open3D()">BẮT ĐẦU</button>
+    <!-- UI Feedback Toast -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-black text-white px-6 py-3 rounded-lg shadow-xl opacity-0 transition-opacity duration-300 pointer-events-none">
+    </div>
 
-<script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, doc, deleteDoc, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-function open3D(){
+        // Firebase Config (Global values provided by environment)
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'vessel-management-001';
 
-var ship = document.getElementById("ship").value;
-var block = document.getElementById("block").value;
+        let user = null;
+        let reports = [];
+        let vesselHours = {}; // To store hours per vessel
 
-var url = "https://mobile3d.hmd.co.kr:8087/VIZWide3D/OutfitMobile3dhttps.html?ship=" + ship + "&block=" + block;
+        // Formats numbers with thousand separator
+        const formatNum = (num) => {
+            return new Intl.NumberFormat('vi-VN').format(num || 0).padStart(3, '0');
+        };
 
-window.location.href = url;
+        const showToast = (msg) => {
+            const toast = document.getElementById('toast');
+            toast.innerText = msg;
+            toast.classList.remove('opacity-0');
+            setTimeout(() => toast.classList.add('opacity-0'), 3000);
+        };
 
-}
+        // UI Initialization & Auth
+        const init = async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Auth error:", error);
+                document.getElementById('auth-status').innerText = "Lỗi kết nối Firebase.";
+            }
+        };
 
-</script>
- <br>
-<br>
-<br>
-<br>
-<br>
-<br>
- Xem Block 3D phiên bản trên điện thoại. Version 1.0
-   <br>
-  Nguyễn Thành Nhân - 201408
-   <br>
-  E/R section  <br>
-  Outfitting 1
+        onAuthStateChanged(auth, (u) => {
+            user = u;
+            if (user) {
+                document.getElementById('auth-status').innerText = `Đã kết nối: ${user.uid}`;
+                setupListeners();
+            }
+        });
+
+        // Setup Data Listeners
+        const setupListeners = () => {
+            if (!user) return;
+
+            const collectionPath = `artifacts/${appId}/public/data/reports`;
+            const hoursPath = `artifacts/${appId}/public/data/vesselHours`;
+
+            document.getElementById('loading-indicator').classList.remove('hidden');
+
+            // Reports listener
+            onSnapshot(collection(db, collectionPath), (snapshot) => {
+                reports = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderUI();
+                document.getElementById('loading-indicator').classList.add('hidden');
+            }, (err) => {
+                console.error("Fetch error:", err);
+                showToast("Lỗi khi tải dữ liệu.");
+            });
+
+            // Hours listener
+            onSnapshot(collection(db, hoursPath), (snapshot) => {
+                const hoursData = {};
+                snapshot.forEach(doc => {
+                    hoursData[doc.id] = doc.data().hours;
+                });
+                vesselHours = hoursData;
+                renderUI();
+            });
+        };
+
+        // Render everything
+        const renderUI = () => {
+            const vesselFilter = document.getElementById('vessel-filter');
+            const dateFilter = document.getElementById('date-filter').value;
+            const selectedVessel = vesselFilter.value;
+            const tableBody = document.getElementById('data-table-body');
+            
+            // Get unique vessels for filter
+            const allVessels = [...new Set(reports.map(r => r.vesselName))].sort();
+            
+            // Update filter dropdown (keep selected value)
+            const currentSelected = vesselFilter.value;
+            vesselFilter.innerHTML = '<option value="">Tất cả các tàu</option>';
+            allVessels.forEach(v => {
+                const opt = document.createElement('option');
+                opt.value = v;
+                opt.textContent = v;
+                if (v === currentSelected) opt.selected = true;
+                vesselFilter.appendChild(opt);
+            });
+
+            // Filter data
+            let filtered = reports;
+            if (selectedVessel) filtered = filtered.filter(r => r.vesselName === selectedVessel);
+            if (dateFilter) filtered = filtered.filter(r => r.date === dateFilter);
+
+            // Sort by date desc
+            filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            // Render Table
+            tableBody.innerHTML = '';
+            if (filtered.length === 0) {
+                document.getElementById('no-data').classList.remove('hidden');
+            } else {
+                document.getElementById('no-data').classList.add('hidden');
+                filtered.forEach(item => {
+                    const tr = document.createElement('tr');
+                    tr.className = "border-b hover:bg-gray-50";
+                    tr.innerHTML = `
+                        <td class="p-3 text-sm">${item.date}</td>
+                        <td class="p-3 font-medium">${item.vesselName}</td>
+                        <td class="p-3">${item.workContent}</td>
+                        <td class="p-3 font-bold text-blue-600">${formatNum(item.peopleCount)}</td>
+                        <td class="p-3 text-xs text-gray-500 italic">${item.note || ''}</td>
+                        <td class="p-3 text-center">
+                            <button class="delete-btn text-red-500 hover:text-red-700" data-id="${item.id}">
+                                ✕
+                            </button>
+                        </td>
+                    `;
+                    tableBody.appendChild(tr);
+                });
+            }
+
+            // Calculations
+            const statsContainer = document.getElementById('stats-container');
+            const totalPeople = filtered.reduce((acc, curr) => acc + (parseInt(curr.peopleCount) || 0), 0);
+            
+            // Total by vessel (using the filtered subset if filtering, or everything)
+            const vesselTotals = {};
+            filtered.forEach(r => {
+                vesselTotals[r.vesselName] = (vesselTotals[r.vesselName] || 0) + (parseInt(r.peopleCount) || 0);
+            });
+
+            statsContainer.innerHTML = `
+                <div class="p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
+                    <p class="text-xs uppercase text-blue-600 font-bold">Tổng số nhân lực (Kết quả lọc)</p>
+                    <p class="text-3xl font-bold">${formatNum(totalPeople)} người</p>
+                </div>
+                <div class="p-4 bg-purple-50 rounded-lg border-l-4 border-purple-500">
+                    <p class="text-xs uppercase text-purple-600 font-bold">Số lượng công việc</p>
+                    <p class="text-3xl font-bold">${formatNum(filtered.length)} đầu việc</p>
+                </div>
+            `;
+
+            // Hours Management Section
+            const hoursList = document.getElementById('hours-input-list');
+            const saveHoursBtn = document.getElementById('save-hours-btn');
+            
+            if (allVessels.length > 0) {
+                saveHoursBtn.classList.remove('hidden');
+                hoursList.innerHTML = '';
+                
+                allVessels.forEach(v => {
+                    const currentTotalPeopleForVessel = reports
+                        .filter(r => r.vesselName === v)
+                        .reduce((acc, curr) => acc + (parseInt(curr.peopleCount) || 0), 0);
+                    
+                    const div = document.createElement('div');
+                    div.className = "flex flex-wrap items-center gap-4 bg-white p-3 rounded border shadow-sm";
+                    div.innerHTML = `
+                        <div class="w-full md:w-1/4 font-bold text-gray-700">${v}</div>
+                        <div class="flex-1 flex items-center gap-2">
+                            <span class="text-xs text-gray-500">Tổng người:</span>
+                            <span class="bg-gray-100 px-2 py-1 rounded font-mono text-blue-700 font-bold">${formatNum(currentTotalPeopleForVessel)}</span>
+                        </div>
+                        <div class="w-full md:w-1/3 flex items-center gap-2">
+                            <label class="text-xs text-gray-500">Giờ công:</label>
+                            <input type="number" 
+                                   class="hour-input border rounded px-2 py-1 w-full focus:ring-1 focus:ring-green-400 outline-none" 
+                                   data-vessel="${v}" 
+                                   value="${vesselHours[v] || 0}" 
+                                   placeholder="0">
+                        </div>
+                    `;
+                    hoursList.appendChild(div);
+                });
+            } else {
+                saveHoursBtn.classList.add('hidden');
+                hoursList.innerHTML = '<p class="text-gray-400 italic text-sm text-center">Nhập dữ liệu để hiển thị danh sách tàu</p>';
+            }
+        };
+
+        // Form Submit
+        document.getElementById('report-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!user) return;
+
+            const btn = document.getElementById('save-btn');
+            btn.disabled = true;
+            btn.innerText = "Đang lưu...";
+
+            const data = {
+                date: document.getElementById('date').value,
+                vesselName: document.getElementById('vesselName').value.trim(),
+                workContent: document.getElementById('workContent').value.trim(),
+                peopleCount: parseInt(document.getElementById('peopleCount').value) || 0,
+                note: document.getElementById('note').value.trim(),
+                timestamp: Date.now()
+            };
+
+            try {
+                await addDoc(collection(db, `artifacts/${appId}/public/data/reports`), data);
+                showToast("Lưu thành công!");
+                // Clear some inputs but keep Date and Vessel for faster next entry
+                document.getElementById('workContent').value = '';
+                document.getElementById('peopleCount').value = '';
+                document.getElementById('note').value = '';
+            } catch (err) {
+                console.error(err);
+                showToast("Lỗi khi lưu dữ liệu.");
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "Lưu dữ liệu";
+            }
+        });
+
+        // Save Man-Hours
+        document.getElementById('save-hours-btn').addEventListener('click', async () => {
+            if (!user) return;
+            const btn = document.getElementById('save-hours-btn');
+            btn.disabled = true;
+            
+            const inputs = document.querySelectorAll('.hour-input');
+            const promises = [];
+
+            inputs.forEach(input => {
+                const vessel = input.getAttribute('data-vessel');
+                const hours = parseInt(input.value) || 0;
+                
+                const docRef = doc(db, `artifacts/${appId}/public/data/vesselHours`, vessel);
+                promises.push(setDoc(docRef, { hours: hours, updatedAt: Date.now() }, { merge: true }));
+            });
+
+            try {
+                await Promise.all(promises);
+                showToast("Đã lưu số giờ công thành công!");
+            } catch (err) {
+                console.error(err);
+                showToast("Lỗi khi lưu giờ công.");
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        // Delete Handler
+        document.getElementById('data-table-body').addEventListener('click', async (e) => {
+            if (e.target.classList.contains('delete-btn')) {
+                const id = e.target.getAttribute('data-id');
+                if (confirm('Bạn có chắc chắn muốn xóa mục này?')) {
+                    try {
+                        await deleteDoc(doc(db, `artifacts/${appId}/public/data/reports`, id));
+                        showToast("Đã xóa.");
+                    } catch (err) {
+                        showToast("Lỗi khi xóa.");
+                    }
+                }
+            }
+        });
+
+        // Filter Handlers
+        document.getElementById('vessel-filter').addEventListener('change', renderUI);
+        document.getElementById('date-filter').addEventListener('change', renderUI);
+        document.getElementById('reset-filter').addEventListener('click', () => {
+            document.getElementById('vessel-filter').value = '';
+            document.getElementById('date-filter').value = '';
+            renderUI();
+        });
+
+        // Set default date to today
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('date').value = today;
+
+        init();
+    </script>
 </body>
-
 </html>
